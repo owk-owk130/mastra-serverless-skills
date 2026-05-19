@@ -1,0 +1,6 @@
+[tagpr]
+	vPrefix = true
+	releaseBranch = main
+	versionFile = package.json
+	changelog = true
+	commitPrefix = "chore(release):"
