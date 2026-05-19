@@ -7,13 +7,13 @@ It plugs into the official `skillSource` hook with an in-memory `BundledSkillSou
 ## Install
 
 ```sh
-pnpm add mastra-serverless-skills @mastra/core
+pnpm add mastra-serverless-skills
 # or
-npm install mastra-serverless-skills @mastra/core
+npm install mastra-serverless-skills
 # or
-yarn add mastra-serverless-skills @mastra/core
+yarn add mastra-serverless-skills
 # or
-bun add mastra-serverless-skills @mastra/core
+bun add mastra-serverless-skills
 ```
 
 ## Minimal usage
