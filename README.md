@@ -86,6 +86,8 @@ new BundledSkillSource(bundle);
 
 `bundleSkills` reads `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` as text by default. Pass `includeBinary: true` to also read other files as `Uint8Array`, or `textExts: [...]` to override the text extension list.
 
+> **Note**: `JSON.stringify` cannot represent a `Uint8Array` losslessly. If you set `includeBinary: true`, write the bundle as a `.ts` / `.js` module that reconstructs binary at module load (e.g., `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` or `Buffer.from(b64, "base64")`) instead of plain JSON.
+
 ## Deploying to Cloudflare Workers
 
 If you use the manual import pattern above (without `bundleSkills`), `wrangler.toml` needs `nodejs_compat` and a text rule so `.md` imports resolve to strings at build time:

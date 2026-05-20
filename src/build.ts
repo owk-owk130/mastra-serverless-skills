@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import type { BundledSkillFiles } from "./bundled-skill-source.js";
 
 const DEFAULT_TEXT_EXTS = [".md", ".txt", ".json", ".yaml", ".yml", ".svg"];
@@ -16,6 +16,14 @@ export interface BundleSkillsOptions {
    * @default false
    */
   includeBinary?: boolean;
+  /**
+   * Prefix prepended to each output key. Defaults to `basename(dir)`, so
+   * `bundleSkills("./skills")` and `bundleSkills("/abs/.../skills")` both
+   * produce keys like `skills/code-review/SKILL.md` — portable regardless
+   * of whether `dir` is relative or absolute. Pass an empty string to use
+   * only the path relative to `dir`.
+   */
+  keyPrefix?: string;
 }
 
 /**
@@ -41,12 +49,15 @@ export async function bundleSkills(
 ): Promise<BundledSkillFiles> {
   const textExts = new Set((options.textExts ?? DEFAULT_TEXT_EXTS).map((e) => e.toLowerCase()));
   const includeBinary = options.includeBinary ?? false;
+  const keyPrefix = options.keyPrefix ?? basename(dir);
   const out: BundledSkillFiles = {};
 
   for await (const filePath of walk(dir)) {
-    const lastDot = filePath.lastIndexOf(".");
-    const ext = lastDot >= 0 ? filePath.slice(lastDot).toLowerCase() : "";
-    const key = filePath.split(sep).join("/");
+    const base = basename(filePath);
+    const lastDot = base.lastIndexOf(".");
+    const ext = lastDot > 0 ? base.slice(lastDot).toLowerCase() : "";
+    const rel = relative(dir, filePath).split(sep).join("/");
+    const key = keyPrefix ? `${keyPrefix}/${rel}` : rel;
 
     if (textExts.has(ext)) {
       out[key] = await readFile(filePath, "utf-8");
@@ -62,6 +73,7 @@ export async function bundleSkills(
 
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
+  entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) yield* walk(p);
