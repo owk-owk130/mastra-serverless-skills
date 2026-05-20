@@ -16,23 +16,45 @@ yarn add mastra-serverless-skills
 bun add mastra-serverless-skills
 ```
 
-## Minimal usage
+## Quick start
+
+Skills live as folders on disk during development. Generate a bundle once at build time, then import it from the worker.
+
+### 1. Add a build step
+
+```js
+// scripts/build-skills.mjs
+import { bundleSkills } from "mastra-serverless-skills/build";
+import { writeFile } from "node:fs/promises";
+
+const files = await bundleSkills("./skills");
+await writeFile("./src/skills-bundle.json", JSON.stringify(files));
+```
+
+Wire it as a pre-step so wrangler / esbuild always sees the latest bundle:
+
+```json
+{
+  "scripts": {
+    "predev": "node scripts/build-skills.mjs",
+    "prebuild": "node scripts/build-skills.mjs",
+    "predeploy": "node scripts/build-skills.mjs"
+  }
+}
+```
+
+### 2. Use it from the worker
 
 ```ts
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
-
-import codeReviewSkill from "./skills/code-review/SKILL.md";
-import styleGuide from "./skills/code-review/references/style-guide.md";
+import bundle from "./skills-bundle.json" with { type: "json" };
 
 const workspace = new Workspace({
   skills: ["skills"],
-  skillSource: new BundledSkillSource({
-    "skills/code-review/SKILL.md": codeReviewSkill,
-    "skills/code-review/references/style-guide.md": styleGuide,
-  }),
+  skillSource: new BundledSkillSource(bundle),
   bm25: true,
 });
 
@@ -48,49 +70,29 @@ export const mastra = new Mastra({
 });
 ```
 
-Run `mastra dev` to try it in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
+`wrangler.toml` only needs `nodejs_compat`; the JSON loader is built in.
 
-## Bundling many skill files
-
-When a skill has multiple references / scripts / assets, writing an `import` per file gets tedious. The `bundleSkills` helper reads a directory at build time and returns a ready-to-pass file map.
-
-```js
-// scripts/build-skills.mjs
-import { bundleSkills } from "mastra-serverless-skills/build";
-import { writeFile } from "node:fs/promises";
-
-const files = await bundleSkills("./skills");
-await writeFile("./src/skills-bundle.json", JSON.stringify(files));
+```toml
+compatibility_flags = ["nodejs_compat"]
 ```
 
-Wire it as a pre-step in `package.json` so wrangler/esbuild always sees the latest bundle:
+Run `mastra dev` to try it locally in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
 
-```json
-{
-  "scripts": {
-    "predev": "node scripts/build-skills.mjs",
-    "prebuild": "node scripts/build-skills.mjs",
-    "predeploy": "node scripts/build-skills.mjs"
-  }
-}
-```
+## Alternative: per-file imports
 
-Then the worker just imports the JSON — no per-file `import` statements, no wrangler text rule needed:
+If you have a small skill set and don't want a build step, you can `import` each file directly:
 
 ```ts
-import { BundledSkillSource } from "mastra-serverless-skills";
-import bundle from "./skills-bundle.json" with { type: "json" };
+import codeReviewSkill from "./skills/code-review/SKILL.md";
+import styleGuide from "./skills/code-review/references/style-guide.md";
 
-new BundledSkillSource(bundle);
+new BundledSkillSource({
+  "skills/code-review/SKILL.md": codeReviewSkill,
+  "skills/code-review/references/style-guide.md": styleGuide,
+});
 ```
 
-`bundleSkills` reads `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` as text by default. Pass `includeBinary: true` to also read other files as `Uint8Array`, or `textExts: [...]` to override the text extension list.
-
-> **Note**: `JSON.stringify` cannot represent a `Uint8Array` losslessly. If you set `includeBinary: true`, write the bundle as a `.ts` / `.js` module that reconstructs binary at module load (e.g., `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` or `Buffer.from(b64, "base64")`) instead of plain JSON.
-
-## Deploying to Cloudflare Workers
-
-If you use the manual import pattern above (without `bundleSkills`), `wrangler.toml` needs `nodejs_compat` and a text rule so `.md` imports resolve to strings at build time:
+For this to work in Cloudflare Workers, `wrangler.toml` needs a text rule so `.md` imports resolve to strings:
 
 ```toml
 compatibility_flags = ["nodejs_compat"]
@@ -101,7 +103,7 @@ globs = ["**/skills/**/*.md"]
 fallthrough = false
 ```
 
-When using `bundleSkills` + JSON import, only `nodejs_compat` is required (the JSON loader is built in).
+esbuild users pass `loader: { '.md': 'text' }`. Vite users can use `import.meta.glob('./skills/**/*', { eager: true, query: '?raw', import: 'default' })`.
 
 ## API
 
@@ -129,6 +131,10 @@ bundleSkills(dir: string, options?: {
 ```
 
 Walks `dir` recursively, returns the same shape `BundledSkillSource` consumes. Keys default to `<basename(dir)>/<relative path>` so absolute and relative `dir` arguments produce identical, portable output; override with `keyPrefix`.
+
+> **Note**: `JSON.stringify` cannot represent a `Uint8Array` losslessly. If you set `includeBinary: true`, write the bundle as a `.ts` / `.js` module that reconstructs binary at module load (e.g., `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` or `Buffer.from(b64, "base64")`) instead of plain JSON.
+
+### Skill file layout
 
 Skill files must follow the [Anthropic Agent Skills spec](https://github.com/anthropics/skills): `SKILL.md` at the skill root with YAML frontmatter (`name`, `description` required), optional `references/`, `scripts/`, `assets/` subdirs.
 
