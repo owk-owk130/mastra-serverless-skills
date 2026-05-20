@@ -124,10 +124,11 @@ import { bundleSkills } from "mastra-serverless-skills/build";
 bundleSkills(dir: string, options?: {
   textExts?: string[];      // default: [".md", ".txt", ".json", ".yaml", ".yml", ".svg"]
   includeBinary?: boolean;  // default: false (skip + warn)
+  keyPrefix?: string;       // default: basename(dir); pass "" to drop the prefix
 }): Promise<Record<string, string | Uint8Array>>;
 ```
 
-Walks `dir` recursively, returns the same shape `BundledSkillSource` consumes.
+Walks `dir` recursively, returns the same shape `BundledSkillSource` consumes. Keys default to `<basename(dir)>/<relative path>` so absolute and relative `dir` arguments produce identical, portable output; override with `keyPrefix`.
 
 Skill files must follow the [Anthropic Agent Skills spec](https://github.com/anthropics/skills): `SKILL.md` at the skill root with YAML frontmatter (`name`, `description` required), optional `references/`, `scripts/`, `assets/` subdirs.
 

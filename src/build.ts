@@ -62,7 +62,7 @@ export async function bundleSkills(
     if (textExts.has(ext)) {
       out[key] = await readFile(filePath, "utf-8");
     } else if (includeBinary) {
-      out[key] = new Uint8Array(await readFile(filePath));
+      out[key] = await readFile(filePath);
     } else {
       console.warn(`[bundleSkills] skipping non-text file: ${filePath}`);
     }
@@ -73,7 +73,7 @@ export async function bundleSkills(
 
 async function* walk(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
-  entries.sort((a, b) => a.name.localeCompare(b.name));
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const entry of entries) {
     const p = join(dir, entry.name);
     if (entry.isDirectory()) yield* walk(p);
