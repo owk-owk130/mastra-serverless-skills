@@ -25,6 +25,11 @@ The whole responsibility is the storage layer (`SkillSource` interface). Skill d
 
 ## Mastra integration
 
-- The package surface is just `BundledSkillSource` (and the `BundledSkillFiles` type alias).
+- Public surface: `BundledSkillSource` + `BundledSkillFiles` type from `mastra-serverless-skills`; `bundleSkills` from `mastra-serverless-skills/build` (build-time only).
 - All other skill machinery is Mastra's: import `Workspace`, `createSkillTools`, error classes (`FileNotFoundError`, `DirectoryNotFoundError`, `NotDirectoryError`) from `@mastra/core/workspace`.
 - Don't reimplement what Mastra provides.
+
+## Subpath exports
+
+- `mastra-serverless-skills` — runtime, no `node:fs`. Safe to bundle into Workers / Lambda / Edge.
+- `mastra-serverless-skills/build` — build-time only; `bundleSkills()` reads via `node:fs/promises`. Never import this from runtime code.
