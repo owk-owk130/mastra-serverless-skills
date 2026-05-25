@@ -36,13 +36,27 @@ Pre-step in `package.json` so wrangler / esbuild always sees the latest bundle:
 Add the generated file to `.gitignore` — it's regenerated on every build.
 
 ```ts
-import { Workspace } from "@mastra/core/workspace";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
 import { skillsBundle } from "./mastra/skills-bundle";
 
-new Workspace({
+const workspace = new Workspace({
   skills: ["skills"],
   skillSource: new BundledSkillSource(skillsBundle),
+  bm25: true,
+});
+
+export const mastra = new Mastra({
+  agents: {
+    skillsAgent: new Agent({
+      name: "skills-agent",
+      model: "anthropic/claude-haiku-4-5",
+      instructions: "Use skills when relevant.",
+      tools: createSkillTools(workspace.skills!),
+    }),
+  },
 });
 ```
 
