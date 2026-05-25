@@ -16,13 +16,20 @@ yarn add mastra-serverless-skills
 bun add mastra-serverless-skills
 ```
 
-## Quick start
+## Usage
 
-Skills live as folders on disk during development. Generate a TypeScript bundle from them at build time with the bundled CLI, then import the bundle from the worker.
+Two ways to bundle skills, pick whichever fits your project:
 
-### 1. Wire the bundle command
+| Pattern                             | Good for                                                            | Setup                                              |
+| ----------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| **A. CLI** (below)                  | Many skills, multiple references per skill, prefer one moving piece | `mastra-serverless-skills bundle` in an npm script |
+| **B. Hand-written imports** (below) | A handful of skills, want no build step / no generated files        | `import` each file, build a small map yourself     |
 
-Add the CLI to your `package.json` so wrangler / esbuild always sees the latest bundle:
+Both end up calling `new BundledSkillSource(map)`; pattern only affects how you produce the map.
+
+### Pattern A: CLI
+
+Add the CLI as a pre-step so wrangler / esbuild always sees the latest bundle:
 
 ```json
 {
@@ -35,8 +42,6 @@ Add the CLI to your `package.json` so wrangler / esbuild always sees the latest 
 ```
 
 The first argument is the directory that contains your skill folders; the second is the generated file. Add the generated file to `.gitignore` — it's regenerated on every build.
-
-### 2. Use the bundle from the worker
 
 ```ts
 import { Mastra } from "@mastra/core";
@@ -69,32 +74,40 @@ export const mastra = new Mastra({
 compatibility_flags = ["nodejs_compat"]
 ```
 
-Run `mastra dev` to try it locally in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
+### Pattern B: Hand-written imports
 
-## Alternative: per-file imports
-
-For tiny skill sets where you don't want a build step, import each file directly and pass the map to `BundledSkillSource`:
+`import` each skill file directly and build the map inline:
 
 ```ts
+import { Workspace } from "@mastra/core/workspace";
+import { BundledSkillSource } from "mastra-serverless-skills";
+
 import codeReviewSkill from "./skills/code-review/SKILL.md";
 import styleGuide from "./skills/code-review/references/style-guide.md";
 
-new BundledSkillSource({
-  "skills/code-review/SKILL.md": codeReviewSkill,
-  "skills/code-review/references/style-guide.md": styleGuide,
+new Workspace({
+  skills: ["skills"],
+  skillSource: new BundledSkillSource({
+    "skills/code-review/SKILL.md": codeReviewSkill,
+    "skills/code-review/references/style-guide.md": styleGuide,
+  }),
 });
 ```
 
 For this to work in Cloudflare Workers, `wrangler.toml` needs a text rule so `.md` imports resolve to strings:
 
 ```toml
+compatibility_flags = ["nodejs_compat"]
+
 [[rules]]
 type = "Text"
 globs = ["**/skills/**/*.md"]
 fallthrough = false
 ```
 
-esbuild users pass `loader: { '.md': 'text' }`. Vite users can use `import.meta.glob('./skills/**/*', { eager: true, query: '?raw', import: 'default' })`.
+esbuild users pass `loader: { '.md': 'text' }`. Vite users can collapse the imports with `import.meta.glob('./skills/**/*', { eager: true, query: '?raw', import: 'default' })`.
+
+Run `mastra dev` to try either pattern locally in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
 
 ## CLI
 
