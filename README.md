@@ -16,23 +16,38 @@ yarn add mastra-serverless-skills
 bun add mastra-serverless-skills
 ```
 
-## Minimal usage
+## Quick start
+
+Skills live as folders on disk during development. Generate a TypeScript bundle from them at build time with the bundled CLI, then import the bundle from the worker.
+
+### 1. Wire the bundle command
+
+Add the CLI to your `package.json` so wrangler / esbuild always sees the latest bundle:
+
+```json
+{
+  "scripts": {
+    "predev": "mastra-serverless-skills bundle src/mastra/skills src/mastra/skills-bundle.ts",
+    "prebuild": "mastra-serverless-skills bundle src/mastra/skills src/mastra/skills-bundle.ts",
+    "predeploy": "mastra-serverless-skills bundle src/mastra/skills src/mastra/skills-bundle.ts"
+  }
+}
+```
+
+The first argument is the directory that contains your skill folders; the second is the generated file. Add the generated file to `.gitignore` — it's regenerated on every build.
+
+### 2. Use the bundle from the worker
 
 ```ts
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
-
-import codeReviewSkill from "./skills/code-review/SKILL.md";
-import styleGuide from "./skills/code-review/references/style-guide.md";
+import { skillsBundle } from "./mastra/skills-bundle";
 
 const workspace = new Workspace({
   skills: ["skills"],
-  skillSource: new BundledSkillSource({
-    "skills/code-review/SKILL.md": codeReviewSkill,
-    "skills/code-review/references/style-guide.md": styleGuide,
-  }),
+  skillSource: new BundledSkillSource(skillsBundle),
   bm25: true,
 });
 
@@ -48,38 +63,79 @@ export const mastra = new Mastra({
 });
 ```
 
-Run `mastra dev` to try it in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
-
-## Deploying to Cloudflare Workers
-
-`wrangler.toml` needs `nodejs_compat` and a text rule so `.md` imports resolve to strings at build time:
+`wrangler.toml` only needs `nodejs_compat`:
 
 ```toml
 compatibility_flags = ["nodejs_compat"]
+```
 
+Run `mastra dev` to try it locally in the Playground at `http://localhost:4111` (needs an LLM provider API key, e.g. `ANTHROPIC_API_KEY`).
+
+## Alternative: per-file imports
+
+For tiny skill sets where you don't want a build step, import each file directly and pass the map to `BundledSkillSource`:
+
+```ts
+import codeReviewSkill from "./skills/code-review/SKILL.md";
+import styleGuide from "./skills/code-review/references/style-guide.md";
+
+new BundledSkillSource({
+  "skills/code-review/SKILL.md": codeReviewSkill,
+  "skills/code-review/references/style-guide.md": styleGuide,
+});
+```
+
+For this to work in Cloudflare Workers, `wrangler.toml` needs a text rule so `.md` imports resolve to strings:
+
+```toml
 [[rules]]
 type = "Text"
 globs = ["**/skills/**/*.md"]
 fallthrough = false
 ```
 
-The same code from "Minimal usage" then bundles into a Worker with no changes.
+esbuild users pass `loader: { '.md': 'text' }`. Vite users can use `import.meta.glob('./skills/**/*', { eager: true, query: '?raw', import: 'default' })`.
+
+## CLI
+
+```
+mastra-serverless-skills bundle <in> <out>
+```
+
+- **`<in>`** — directory containing skill folders. Common layouts:
+  - `./skills` (Anthropic Agent Skills spec convention)
+  - `./src/mastra/skills` (typical Mastra starter)
+  - `./content/skills` etc.
+- **`<out>`** — output `.ts` file path. The file exports `const skillsBundle: Record<string, string>` containing every skill folder's `SKILL.md` + `references/` + `scripts/` + `assets/` (text files only).
+
+Behaviour:
+
+- A **skill folder** is a directory containing `SKILL.md` directly. The walker stops recursing once one is found (skills don't nest).
+- Output keys are `<basename(in)>/<relative path>`, so a typical Mastra config like `skills: ["skills"]` lines up with `bundle src/mastra/skills ...` (basename `skills`).
+- Hidden directories (`.git`, `.claude`, `.next`, etc.) and `node_modules` are skipped — Claude Code skills under `.claude/skills/` are **not** picked up.
+- Non-text files (anything outside `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` / `.html` / `.css`) are skipped with a warning. For binary assets, construct the map yourself and pass directly to `BundledSkillSource`.
 
 ## API
 
+### `BundledSkillSource`
+
 ```ts
+import { BundledSkillSource } from "mastra-serverless-skills";
+
 new BundledSkillSource(files: Record<string, string | Uint8Array>, options?: { buildTime?: Date });
 ```
 
 - **files** — map from path → content. Keys are normalized: `./skills/foo`, `skills/foo`, `/skills/foo` all resolve to the same entry. Use `string` for text, `Uint8Array` for binary assets.
 - **options.buildTime** — used as `stat()`'s `createdAt` / `modifiedAt`. Defaults to epoch.
 
+### Skill file layout
+
 Skill files must follow the [Anthropic Agent Skills spec](https://github.com/anthropics/skills): `SKILL.md` at the skill root with YAML frontmatter (`name`, `description` required), optional `references/`, `scripts/`, `assets/` subdirs.
 
 ## Platform notes
 
 - **Cloudflare Workers** — Verified. ~1.7 MB bundle (gzip ~306 KB). Needs `nodejs_compat`.
-- **AWS Lambda / Vercel Edge** — Same pattern, untested here. Bundle `.md` as text (esbuild: `loader: { '.md': 'text' }`), and use a runtime that polyfills the Node modules `@mastra/core/workspace` imports.
+- **AWS Lambda / Vercel Edge** — Same pattern, untested here. Use a runtime that polyfills the Node modules `@mastra/core/workspace` imports.
 
 ## License
 
