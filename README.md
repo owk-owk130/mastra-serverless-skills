@@ -1,14 +1,24 @@
 # mastra-serverless-skills
 
-A [Mastra](https://mastra.ai) `Workspace` extension that ships Agent Skills to edge / serverless runtimes — Cloudflare Workers, AWS Lambda, Vercel Edge, and anywhere else without `node:fs`.
-
-It plugs into Mastra's official `skillSource` hook with an in-memory `BundledSkillSource`. Discovery, glob support, BM25 search, and the `skill` / `skill_search` / `skill_read` tools all keep working unchanged.
+A [Mastra](https://mastra.ai) `Workspace` extension that ships Agent Skills to edge / serverless runtimes — Cloudflare Workers, AWS Lambda, Vercel Edge, and anywhere else without `node:fs`. It plugs into Mastra's official `skillSource` hook.
 
 ## Install
 
 ```sh
 pnpm add mastra-serverless-skills
 # or: npm install / yarn add / bun add
+```
+
+## Project layout
+
+Put each skill in its own folder, with `SKILL.md` at the root (Anthropic Skills convention):
+
+```
+skills/
+└── code-review/
+    ├── SKILL.md
+    └── references/
+        └── style-guide.md
 ```
 
 ## Usage
@@ -36,8 +46,6 @@ Pre-step in `package.json` so wrangler / esbuild always sees the latest bundle:
 Add the generated file to `.gitignore` — it's regenerated on every build.
 
 ```ts
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
 import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
 import { skillsBundle } from "./mastra/skills-bundle";
@@ -45,37 +53,30 @@ import { skillsBundle } from "./mastra/skills-bundle";
 const workspace = new Workspace({
   skills: ["skills"],
   skillSource: new BundledSkillSource(skillsBundle),
-  bm25: true,
 });
 
-export const mastra = new Mastra({
-  agents: {
-    skillsAgent: new Agent({
-      name: "skills-agent",
-      model: "anthropic/claude-haiku-4-5",
-      instructions: "Use skills when relevant.",
-      tools: createSkillTools(workspace.skills!),
-    }),
-  },
-});
+// Pass tools into your Mastra Agent
+const tools = createSkillTools(workspace.skills!);
 ```
 
 ### Pattern B: Hand-written imports
 
 ```ts
-import { Workspace } from "@mastra/core/workspace";
+import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
 
 import codeReviewSkill from "./skills/code-review/SKILL.md";
 import styleGuide from "./skills/code-review/references/style-guide.md";
 
-new Workspace({
+const workspace = new Workspace({
   skills: ["skills"],
   skillSource: new BundledSkillSource({
     "skills/code-review/SKILL.md": codeReviewSkill,
     "skills/code-review/references/style-guide.md": styleGuide,
   }),
 });
+
+const tools = createSkillTools(workspace.skills!);
 ```
 
 For Cloudflare Workers, `wrangler.toml` needs a text rule so `.md` imports resolve to strings:
@@ -93,7 +94,15 @@ fallthrough = false
 mastra-serverless-skills bundle <in> <out>
 ```
 
-Walks `<in>` for **skill folders** (directories containing `SKILL.md`) and writes a TypeScript module to `<out>` exporting `const skillsBundle`.
+Walks `<in>` for **skill folders** (directories containing `SKILL.md`) and writes a TypeScript module to `<out>`:
+
+```ts
+// auto-generated
+export const skillsBundle = {
+  "skills/code-review/SKILL.md": "---\nname: code-review\n...",
+  "skills/code-review/references/style-guide.md": "# Style Guide\n...",
+};
+```
 
 - Output keys: `<basename(in)>/<relative path>`, so `bundle src/mastra/skills ...` lines up with `skills: ["skills"]` (basename `skills`).
 - Hidden dirs (`.git`, `.claude`, `.next`, …) and `node_modules` are skipped — Claude Code skills under `.claude/skills/` are **not** included.
