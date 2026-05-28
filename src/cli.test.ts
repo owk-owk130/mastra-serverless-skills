@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { bundle } from "./cli.js";
 
 let tempDir: string;
@@ -21,11 +22,16 @@ const writeFixture = async (relPath: string, content: string | Uint8Array): Prom
 };
 
 const importGeneratedBundle = async (filePath: string): Promise<Record<string, string>> => {
-  // Strip the type annotation if any and eval the export to inspect it.
-  const src = await readFile(filePath, "utf-8");
-  const match = src.match(/export const skillsBundle\s*=\s*(\{[\s\S]*?\});/);
-  if (!match) throw new Error(`Could not parse generated bundle: ${filePath}`);
-  return JSON.parse(match[1]!) as Record<string, string>;
+  // Load the generated module via `import()` so we exercise the real TS source
+  // shape instead of regex-parsing it (which is fragile against any `};` inside
+  // bundled file contents). Rename to `.mjs` so Node treats it as ESM regardless
+  // of the file's original extension.
+  const mjsPath = filePath.endsWith(".mjs") ? filePath : `${filePath}.mjs`;
+  if (mjsPath !== filePath) await rename(filePath, mjsPath);
+  const mod = (await import(`${pathToFileURL(mjsPath).href}?t=${Date.now()}`)) as {
+    skillsBundle: Record<string, string>;
+  };
+  return mod.skillsBundle;
 };
 
 describe("bundle CLI logic", () => {
