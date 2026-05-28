@@ -12,8 +12,9 @@ Arguments:
   <out>  output .ts file path (e.g. src/skills-bundle.ts)
 
 Notes:
-  - A skill folder is a subdirectory of <in> that contains SKILL.md.
-    Its references/, scripts/, and assets/ subdirs are included.
+  - A skill folder is any directory that contains SKILL.md — either <in> itself
+    or any (nested) subdirectory of it. Its references/, scripts/, and assets/
+    subdirs are bundled alongside SKILL.md.
   - Hidden directories (.git, .claude, .next, etc.) and node_modules are skipped,
     so Claude Code skills under .claude/skills/ won't leak into the bundle.
   - Output keys are <basename(in)>/<relative path>, matching the typical
@@ -33,7 +34,12 @@ async function main(): Promise<void> {
     process.stderr.write(`Unknown command: ${args[0]}\n\n${HELP}`);
     process.exit(1);
   }
-  const [, inDir, outFile] = args;
+  const rest = args.slice(1);
+  if (rest.includes("--help") || rest.includes("-h")) {
+    process.stdout.write(HELP);
+    return;
+  }
+  const [inDir, outFile] = rest;
   if (!inDir || !outFile) {
     process.stderr.write(`Missing arguments.\n\n${HELP}`);
     process.exit(1);
