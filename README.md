@@ -106,7 +106,7 @@ export const skillsBundle = {
 
 - Output keys: `<basename(in)>/<relative path>`, so `bundle src/mastra/skills ...` lines up with `skills: ["skills"]` (basename `skills`).
 - Hidden dirs (`.git`, `.claude`, `.next`, …) and `node_modules` are skipped — Claude Code skills under `.claude/skills/` are **not** included.
-- Text-only (`.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` / `.html` / `.css`). Non-text files are skipped with a warning; for binary assets construct the map yourself.
+- Text-only. Docs/data: `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` / `.html` / `.css`. Scripts: `.sh` / `.bash` / `.zsh` / `.py` / `.js` / `.ts` / `.mjs` / `.cjs`. Anything else is skipped with a warning; for binary assets construct the map yourself.
 
 ## API
 

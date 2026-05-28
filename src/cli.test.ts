@@ -87,6 +87,25 @@ describe("bundle CLI logic", () => {
     expect(Object.keys(bundleObj)).toEqual(["skills/foo/SKILL.md"]);
   });
 
+  it("bundles common script extensions under scripts/", async () => {
+    await writeFixture("skills/foo/SKILL.md", "# foo");
+    await writeFixture("skills/foo/scripts/run.py", "print('hi')");
+    await writeFixture("skills/foo/scripts/setup.sh", "#!/bin/sh\necho hi");
+    await writeFixture("skills/foo/scripts/tool.ts", "export const x = 1;");
+
+    const out = join(tempDir, "out.ts");
+    await bundle(join(tempDir, "skills"), out);
+    const bundleObj = await importGeneratedBundle(out);
+
+    expect(Object.keys(bundleObj).sort()).toEqual([
+      "skills/foo/SKILL.md",
+      "skills/foo/scripts/run.py",
+      "skills/foo/scripts/setup.sh",
+      "skills/foo/scripts/tool.ts",
+    ]);
+    expect(bundleObj["skills/foo/scripts/run.py"]).toBe("print('hi')");
+  });
+
   it("walks recursively to find nested skill folders", async () => {
     await writeFixture("skills/coding/code-review/SKILL.md", "# code-review");
     await writeFixture("skills/ops/incident-response/SKILL.md", "# incident");

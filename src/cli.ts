@@ -2,7 +2,26 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 
-const TEXT_EXTS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".svg", ".html", ".css"]);
+const TEXT_EXTS = new Set([
+  // docs / data
+  ".md",
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".svg",
+  ".html",
+  ".css",
+  // scripts under `scripts/` (Agent Skills convention)
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".py",
+  ".js",
+  ".ts",
+  ".mjs",
+  ".cjs",
+]);
 
 const shouldSkipDir = (name: string): boolean => name.startsWith(".") || name === "node_modules";
 
