@@ -20,6 +20,9 @@
     "type": "git",
     "url": "git+https://github.com/owk-owk130/mastra-serverless-skills.git"
   },
+  "bin": {
+    "mastra-serverless-skills": "./dist/bin.js"
+  },
   "files": [
     "dist",
     "README.md",

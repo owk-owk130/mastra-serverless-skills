@@ -1,0 +1,161 @@
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
+
+const TEXT_EXTS = new Set([
+  // docs / data
+  ".md",
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".svg",
+  ".html",
+  ".css",
+  // scripts under `scripts/` (Agent Skills convention)
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".py",
+  ".js",
+  ".ts",
+  ".mjs",
+  ".cjs",
+]);
+
+const shouldSkipDir = (name: string): boolean => name.startsWith(".") || name === "node_modules";
+
+const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+const isTextExt = (file: string): boolean => {
+  const base = basename(file);
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return TEXT_EXTS.has(base.slice(dot).toLowerCase());
+};
+
+/**
+ * Read a directory and tolerate "not there" outcomes (ENOENT/ENOTDIR) without
+ * masking real problems like permission errors.
+ */
+const readdirOrEmpty = async (dir: string): Promise<Dirent[]> => {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw err;
+  }
+};
+
+async function* walk(dir: string): AsyncGenerator<string> {
+  const entries = await readdirOrEmpty(dir);
+  entries.sort((a, b) => compare(a.name, b.name));
+  for (const entry of entries) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (shouldSkipDir(entry.name)) continue;
+      yield* walk(p);
+    } else if (entry.isFile()) {
+      yield p;
+    }
+  }
+}
+
+/**
+ * Locate skill folders: directories containing a `SKILL.md` file directly inside them.
+ * Recursion stops once a skill folder is found (skills don't nest).
+ */
+async function findSkillFolders(root: string): Promise<string[]> {
+  const go = async (dir: string): Promise<string[]> => {
+    const entries = await readdirOrEmpty(dir);
+    if (entries.some((e) => e.isFile() && e.name === "SKILL.md")) return [dir];
+    const children = entries
+      .filter((e) => e.isDirectory() && !shouldSkipDir(e.name))
+      .map((e) => join(dir, e.name));
+    const nested = await Promise.all(children.map(go));
+    return nested.flat();
+  };
+  const found = await go(root);
+  return found.sort(compare);
+}
+
+async function collectSkillFiles(skillRoot: string): Promise<Record<string, string>> {
+  const skillMd = join(skillRoot, "SKILL.md");
+  const textFiles: string[] = [];
+  for (const subdir of ["references", "scripts", "assets"]) {
+    for await (const file of walk(join(skillRoot, subdir))) {
+      if (isTextExt(file)) {
+        textFiles.push(file);
+      } else {
+        console.warn(`[mastra-serverless-skills] skipping non-text file: ${file}`);
+      }
+    }
+  }
+  const paths = [skillMd, ...textFiles];
+  const entries = await Promise.all(
+    paths.map(async (p) => [p, await readFile(p, "utf-8")] as const),
+  );
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Walk `inDir` for skill folders (folders containing `SKILL.md`), bundle their contents,
+ * and write a TypeScript module to `outFile` exporting:
+ *
+ * - `skillsBundle` — a path → text map matching the shape `BundledSkillSource` accepts,
+ *   keyed `<basename(inDir)>/<relative path>`.
+ * - `skillsPaths` — `[basename(inDir)]`, the matching value for the Mastra `Workspace`
+ *   `skills` config, so the two can never drift apart.
+ */
+export async function bundle(inDir: string, outFile: string): Promise<void> {
+  // Resolve so `.`-style inputs still yield a real directory name as the key prefix.
+  const root = resolve(inDir);
+
+  // Surface a clear ENOENT/ENOTDIR up front so we don't mask it behind the
+  // generic "No skill folders" error below.
+  let stats;
+  try {
+    stats = await stat(root);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") throw new Error(`Input directory not found: ${inDir}`);
+    throw err;
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`Input path is not a directory: ${inDir}`);
+  }
+
+  const keyPrefix = basename(root);
+  const skillFolders = await findSkillFolders(root);
+  if (skillFolders.length === 0) {
+    throw new Error(`No skill folders (containing SKILL.md) found under ${inDir}`);
+  }
+
+  const collected = await Promise.all(skillFolders.map(collectSkillFiles));
+  const merged: Record<string, string> = {};
+  for (const files of collected) {
+    for (const [absPath, content] of Object.entries(files)) {
+      const rel = relative(root, absPath).split(sep).join("/");
+      merged[`${keyPrefix}/${rel}`] = content;
+    }
+  }
+
+  const sorted = Object.fromEntries(Object.entries(merged).sort(([a], [b]) => compare(a, b)));
+
+  // JSON.stringify leaves U+2028 / U+2029 untouched; they're valid in JSON but
+  // break JavaScript source. Escape them so the emitted module always parses.
+  const safeJson = JSON.stringify(sorted, null, 2).replace(/[\u2028\u2029]/g, (ch) =>
+    ch === "\u2028" ? "\\u2028" : "\\u2029",
+  );
+  const tsContent = `// Auto-generated by \`mastra-serverless-skills bundle\` — do not edit.
+export const skillsPaths = [${JSON.stringify(keyPrefix)}];
+
+export const skillsBundle = ${safeJson};
+`;
+  await mkdir(dirname(outFile), { recursive: true });
+  await writeFile(outFile, tsContent);
+  console.log(
+    `[mastra-serverless-skills] bundled ${Object.keys(sorted).length} files from ${skillFolders.length} skill folder(s) → ${outFile}`,
+  );
+}
