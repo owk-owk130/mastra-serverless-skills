@@ -41,8 +41,8 @@ async function main(): Promise<void> {
     return;
   }
   const [inDir, outFile] = rest;
-  if (!inDir || !outFile) {
-    process.stderr.write(`Missing arguments.\n\n${HELP}`);
+  if (!inDir || !outFile || rest.length > 2) {
+    process.stderr.write(`Expected exactly 2 arguments: <in> <out>.\n\n${HELP}`);
     process.exit(1);
   }
   await bundle(inDir, outFile);
