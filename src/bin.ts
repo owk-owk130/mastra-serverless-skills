@@ -16,8 +16,10 @@ Notes:
   - A skill folder is any directory that contains SKILL.md — either <in> itself
     or any (nested) subdirectory of it. Its references/, scripts/, and assets/
     subdirs are bundled alongside SKILL.md.
-  - Hidden directories (.git, .claude, .next, etc.) and node_modules are skipped,
-    so Claude Code skills under .claude/skills/ won't leak into the bundle.
+  - Hidden files and directories (.git, .claude, .DS_Store, etc.) and
+    node_modules are skipped, so Claude Code skills under .claude/skills/
+    won't leak into the bundle. Other entries at a skill's root are skipped
+    with a warning.
   - Output keys are <basename(in)>/<relative path>; the exported skillsPaths
     is [<basename(in)>], so passing it as the \`skills\` config always matches.
 
