@@ -134,13 +134,15 @@ export const skillsBundle = {
 ## API
 
 ```ts
-import { BundledSkillSource } from "mastra-serverless-skills";
+import { BundledSkillSource, type BundledSkillFiles } from "mastra-serverless-skills";
 
-new BundledSkillSource(files: Record<string, string | Uint8Array>, options?: { buildTime?: Date });
+const files: BundledSkillFiles = { "skills/foo/SKILL.md": "..." };
+new BundledSkillSource(files, { buildTime: new Date() });
 ```
 
-- **files** — path → content map. Keys normalize so `./skills/foo`, `skills/foo`, `/skills/foo` all resolve to the same entry.
+- **files** — path → content map (`Record<string, string | Uint8Array>`). Keys normalize so `./skills/foo`, `skills/foo`, `/skills/foo` all resolve to the same entry.
 - **options.buildTime** — used as `stat()`'s `createdAt` / `modifiedAt`. Defaults to epoch.
+- `Uint8Array` entries are returned as `Buffer` (Mastra's `SkillSource` interface requires it) — on Cloudflare Workers enable the `nodejs_compat` flag if your map contains binaries. Text-only bundles (the CLI output) never touch `Buffer`.
 
 ## License
 
