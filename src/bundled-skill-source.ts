@@ -15,6 +15,16 @@ const MIME_BY_EXT: Record<string, string> = {
   json: "application/json",
   yaml: "application/yaml",
   yml: "application/yaml",
+  html: "text/html",
+  css: "text/css",
+  js: "text/javascript",
+  mjs: "text/javascript",
+  cjs: "text/javascript",
+  ts: "application/typescript",
+  py: "text/x-python",
+  sh: "text/x-shellscript",
+  bash: "text/x-shellscript",
+  zsh: "text/x-shellscript",
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -27,14 +37,11 @@ const guessMime = (name: string): string | undefined => {
   return ext ? MIME_BY_EXT[ext] : undefined;
 };
 
-const normalize = (p: string): string => {
-  if (p === ".") return "";
-  let path = p;
-  if (path.startsWith("./")) path = path.slice(2);
-  while (path.startsWith("/")) path = path.slice(1);
-  while (path.endsWith("/") && path.length > 1) path = path.slice(0, -1);
-  return path;
-};
+const normalize = (p: string): string =>
+  p
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== ".")
+    .join("/");
 
 const parentDirs = (path: string): string[] => {
   const dirs: string[] = [];
@@ -49,17 +56,22 @@ const parentDirs = (path: string): string[] => {
   return dirs;
 };
 
+const textEncoder = new TextEncoder();
+
 const byteLength = (content: string | Uint8Array): number =>
-  typeof content === "string" ? new TextEncoder().encode(content).byteLength : content.byteLength;
+  typeof content === "string" ? textEncoder.encode(content).byteLength : content.byteLength;
 
 export class BundledSkillSource implements SkillSource {
   readonly #files: Map<string, string | Uint8Array>;
   readonly #dirs: Set<string>;
+  // Lazy stat-size cache; the bundle is immutable, so byte lengths never change.
+  readonly #sizes = new Map<string, number>();
   readonly #buildTime: Date;
 
   constructor(files: BundledSkillFiles, options?: { buildTime?: Date }) {
     this.#files = new Map();
-    this.#dirs = new Set();
+    // "" is the bundle root, which always exists as a directory.
+    this.#dirs = new Set([""]);
     this.#buildTime = options?.buildTime ?? new Date(0);
 
     for (const [rawPath, content] of Object.entries(files)) {
@@ -81,10 +93,15 @@ export class BundledSkillSource implements SkillSource {
 
     const content = this.#files.get(p);
     if (content !== undefined) {
+      let size = this.#sizes.get(p);
+      if (size === undefined) {
+        size = byteLength(content);
+        this.#sizes.set(p, size);
+      }
       return {
         name,
         type: "file",
-        size: byteLength(content),
+        size,
         createdAt: this.#buildTime,
         modifiedAt: this.#buildTime,
         mimeType: guessMime(name),
@@ -116,7 +133,7 @@ export class BundledSkillSource implements SkillSource {
 
   async readdir(path: string): Promise<SkillSourceEntry[]> {
     const p = normalize(path);
-    if (p !== "" && !this.#dirs.has(p)) {
+    if (!this.#dirs.has(p)) {
       throw this.#files.has(p) ? new NotDirectoryError(path) : new DirectoryNotFoundError(path);
     }
     const prefix = p === "" ? "" : `${p}/`;
