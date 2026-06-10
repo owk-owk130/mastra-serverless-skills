@@ -4,8 +4,9 @@ import { bundle } from "./cli.js";
 const HELP = `Usage: mastra-serverless-skills bundle <in> <out>
 
 Walks <in> for skill folders (folders containing SKILL.md) and writes a
-TypeScript module to <out> exporting the bundle in the shape
-BundledSkillSource consumes.
+TypeScript module to <out> exporting:
+  - skillsBundle: the path → content map BundledSkillSource consumes
+  - skillsPaths:  the matching value for the Mastra Workspace \`skills\` config
 
 Arguments:
   <in>   directory containing skill folders (e.g. ./skills or src/mastra/skills)
@@ -17,8 +18,8 @@ Notes:
     subdirs are bundled alongside SKILL.md.
   - Hidden directories (.git, .claude, .next, etc.) and node_modules are skipped,
     so Claude Code skills under .claude/skills/ won't leak into the bundle.
-  - Output keys are <basename(in)>/<relative path>, matching the typical
-    Mastra config \`skills: [<basename(in)>]\`.
+  - Output keys are <basename(in)>/<relative path>; the exported skillsPaths
+    is [<basename(in)>], so passing it as the \`skills\` config always matches.
 
 Example:
   mastra-serverless-skills bundle src/mastra/skills src/mastra/skills-bundle.ts
