@@ -43,20 +43,26 @@ Pre-step in `package.json` so wrangler / esbuild always sees the latest bundle:
 }
 ```
 
-Add the generated file to `.gitignore` — it's regenerated on every build.
+Add the generated file to `.gitignore` — it's regenerated on every build. If CI runs `tsc --noEmit` or tests before the build, add the same command as a `pretypecheck` / `pretest` script so the import resolves on a fresh clone.
 
 ```ts
 import { Workspace, createSkillTools } from "@mastra/core/workspace";
 import { BundledSkillSource } from "mastra-serverless-skills";
-import { skillsBundle } from "./mastra/skills-bundle";
+import { skillsBundle, skillsPaths } from "./mastra/skills-bundle";
 
 const workspace = new Workspace({
-  skills: ["skills"],
+  skills: skillsPaths, // generated alongside the bundle, always matches its keys
   skillSource: new BundledSkillSource(skillsBundle),
 });
 
 // Pass tools into your Mastra Agent
 const tools = createSkillTools(workspace.skills!);
+```
+
+The generated file sits in your bundler's module graph, so re-running `bundle` makes `wrangler dev` / `vite dev` reload automatically. To regenerate on skill edits, run the command from any file watcher, e.g.:
+
+```sh
+watchexec -w src/mastra/skills -- mastra-serverless-skills bundle src/mastra/skills src/mastra/skills-bundle.ts
 ```
 
 ### Pattern B: Hand-written imports
@@ -88,6 +94,21 @@ globs = ["**/skills/**/*.md"]
 fallthrough = false
 ```
 
+On Vite (including `@cloudflare/vite-plugin`), `import.meta.glob` builds the map without the CLI or per-file imports — and skill edits hot-reload:
+
+```ts
+const files = import.meta.glob("./skills/**/*.md", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+const workspace = new Workspace({
+  skills: ["skills"],
+  skillSource: new BundledSkillSource(files),
+});
+```
+
 ## CLI
 
 ```
@@ -98,13 +119,15 @@ Walks `<in>` for **skill folders** (directories containing `SKILL.md`) and write
 
 ```ts
 // auto-generated
+export const skillsPaths = ["skills"];
+
 export const skillsBundle = {
   "skills/code-review/SKILL.md": "---\nname: code-review\n...",
   "skills/code-review/references/style-guide.md": "# Style Guide\n...",
 };
 ```
 
-- Output keys: `<basename(in)>/<relative path>`, so `bundle src/mastra/skills ...` lines up with `skills: ["skills"]` (basename `skills`).
+- Output keys: `<basename(in)>/<relative path>`. `skillsPaths` is `[<basename(in)>]`, so passing it as the `skills` config always matches the keys — no manual syncing.
 - Hidden dirs (`.git`, `.claude`, `.next`, …) and `node_modules` are skipped — Claude Code skills under `.claude/skills/` are **not** included.
 - Text-only. Docs/data: `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` / `.html` / `.css`. Scripts: `.sh` / `.bash` / `.zsh` / `.py` / `.js` / `.ts` / `.mjs` / `.cjs`. Anything else is skipped with a warning; for binary assets construct the map yourself.
 
