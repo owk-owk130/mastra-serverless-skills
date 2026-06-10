@@ -26,7 +26,7 @@ The whole responsibility is the storage layer (`SkillSource` interface) plus a s
 ## Public surface
 
 - Library entry (`mastra-serverless-skills`) → `BundledSkillSource`, `BundledSkillFiles` type.
-- Bin entry (`mastra-serverless-skills` CLI) → `bundle <in> <out>` subcommand. Reads a skill directory and writes a TS module the runtime imports.
+- Bin entry (`mastra-serverless-skills` CLI) → `bundle <in> <out>` subcommand. Reads a skill directory and writes a TS module the runtime imports, exporting `skillsBundle` (path → content map) and `skillsPaths` (the matching `skills` config value).
 
 The CLI lives in `src/bin.ts` (arg plumbing) + `src/cli.ts` (bundle logic). Both are Node-only — never import them from runtime code.
 
