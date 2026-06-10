@@ -1,6 +1,6 @@
 {
   "name": "mastra-serverless-skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mastra Workspace extension for running Skills on edge / serverless runtimes",
   "keywords": [
     "cloudflare-workers",
