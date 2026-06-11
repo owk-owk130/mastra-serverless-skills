@@ -97,7 +97,7 @@ async function collectSkillFiles(skillRoot: string): Promise<Record<string, stri
       entry.isDirectory() && !SKILL_SUBDIRS.includes(entry.name) && !shouldSkipDir(entry.name);
     if (strayFile || strayDir) {
       console.warn(
-        `[mastra-serverless-skills] skipping ${entry.isFile() ? "file" : "directory"} outside references/scripts/assets: ${join(skillRoot, entry.name)}`,
+        `[mastra-serverless-skills] skipping ${entry.isFile() ? "file" : "directory"} outside ${SKILL_SUBDIRS.join("/")}: ${join(skillRoot, entry.name)}`,
       );
     }
   }
