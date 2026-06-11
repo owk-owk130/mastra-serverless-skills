@@ -54,6 +54,27 @@ describe("BundledSkillSource", () => {
       expect(fromDot).toEqual(fromEmpty);
       expect(fromDot.map((e) => e.name).sort()).toEqual(["skills"]);
     });
+
+    it("collapses duplicate slashes and inner '.' segments", async () => {
+      const src = new BundledSkillSource(sampleFiles);
+      expect(await src.exists("skills//code-review")).toBe(true);
+      expect(await src.readFile("skills/./code-review/SKILL.md")).toBe(CODE_REVIEW_SKILL);
+    });
+  });
+
+  describe("root path", () => {
+    it("reports the root as an existing directory in exists and stat", async () => {
+      const src = new BundledSkillSource(sampleFiles);
+      expect(await src.exists(".")).toBe(true);
+      expect(await src.exists("/")).toBe(true);
+      expect((await src.stat(".")).type).toBe("directory");
+    });
+
+    it("reports the root as existing even for an empty bundle", async () => {
+      const src = new BundledSkillSource({});
+      expect(await src.exists(".")).toBe(true);
+      expect((await src.stat(".")).type).toBe("directory");
+    });
   });
 
   describe("exists", () => {
@@ -147,12 +168,30 @@ describe("BundledSkillSource", () => {
       const src = new BundledSkillSource(sampleFiles);
       await expect(src.stat("skills/missing")).rejects.toBeInstanceOf(FileNotFoundError);
     });
+
+    it("reports mime types for bundled script and web extensions", async () => {
+      const src = new BundledSkillSource({
+        "skills/foo/scripts/run.py": "print()",
+        "skills/foo/scripts/setup.sh": "echo hi",
+        "skills/foo/scripts/tool.ts": "export {};",
+        "skills/foo/references/page.html": "<html></html>",
+        "skills/foo/references/style.css": "a {}",
+      });
+      expect((await src.stat("skills/foo/scripts/run.py")).mimeType).toBe("text/x-python");
+      expect((await src.stat("skills/foo/scripts/setup.sh")).mimeType).toBe("text/x-shellscript");
+      expect((await src.stat("skills/foo/scripts/tool.ts")).mimeType).toBe(
+        "application/typescript",
+      );
+      expect((await src.stat("skills/foo/references/page.html")).mimeType).toBe("text/html");
+      expect((await src.stat("skills/foo/references/style.css")).mimeType).toBe("text/css");
+    });
   });
 
   describe("realpath", () => {
     it("returns the normalized path", async () => {
       const src = new BundledSkillSource(sampleFiles);
       expect(await src.realpath("./skills/code-review")).toBe("skills/code-review");
+      expect(await src.realpath("skills//./code-review")).toBe("skills/code-review");
     });
   });
 });

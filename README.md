@@ -128,7 +128,8 @@ export const skillsBundle = {
 ```
 
 - Output keys: `<basename(in)>/<relative path>`. `skillsPaths` is `[<basename(in)>]`, so passing it as the `skills` config always matches the keys — no manual syncing.
-- Hidden dirs (`.git`, `.claude`, `.next`, …) and `node_modules` are skipped — Claude Code skills under `.claude/skills/` are **not** included.
+- Each skill folder contributes `SKILL.md` plus its `references/`, `scripts/`, and `assets/` subdirs; other entries at the skill root are skipped with a warning.
+- Hidden dirs (`.git`, `.claude`, `.next`, …), hidden files (`.DS_Store`, …), and `node_modules` are skipped silently — Claude Code skills under `.claude/skills/` are **not** included.
 - Text-only. Docs/data: `.md` / `.txt` / `.json` / `.yaml` / `.yml` / `.svg` / `.html` / `.css`. Scripts: `.sh` / `.bash` / `.zsh` / `.py` / `.js` / `.ts` / `.mjs` / `.cjs`. Anything else is skipped with a warning; for binary assets construct the map yourself.
 
 ## API

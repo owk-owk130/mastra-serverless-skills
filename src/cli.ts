@@ -23,7 +23,11 @@ const TEXT_EXTS = new Set([
   ".cjs",
 ]);
 
-const shouldSkipDir = (name: string): boolean => name.startsWith(".") || name === "node_modules";
+const SKILL_SUBDIRS = ["references", "scripts", "assets"];
+
+const isHidden = (name: string): boolean => name.startsWith(".");
+
+const shouldSkipDir = (name: string): boolean => isHidden(name) || name === "node_modules";
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -56,7 +60,9 @@ async function* walk(dir: string): AsyncGenerator<string> {
     if (entry.isDirectory()) {
       if (shouldSkipDir(entry.name)) continue;
       yield* walk(p);
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !isHidden(entry.name)) {
+      // Hidden files (.DS_Store, .gitignore, ...) are housekeeping, not skill
+      // content — skip them without the non-text warning.
       yield p;
     }
   }
@@ -82,8 +88,22 @@ async function findSkillFolders(root: string): Promise<string[]> {
 
 async function collectSkillFiles(skillRoot: string): Promise<Record<string, string>> {
   const skillMd = join(skillRoot, "SKILL.md");
+
+  // Only SKILL.md plus the references/scripts/assets subdirs are bundled; warn
+  // about other entries at the skill root so they don't go missing silently.
+  for (const entry of await readdirOrEmpty(skillRoot)) {
+    const strayFile = entry.isFile() && entry.name !== "SKILL.md" && !isHidden(entry.name);
+    const strayDir =
+      entry.isDirectory() && !SKILL_SUBDIRS.includes(entry.name) && !shouldSkipDir(entry.name);
+    if (strayFile || strayDir) {
+      console.warn(
+        `[mastra-serverless-skills] skipping ${entry.isFile() ? "file" : "directory"} outside ${SKILL_SUBDIRS.join("/")}: ${join(skillRoot, entry.name)}`,
+      );
+    }
+  }
+
   const textFiles: string[] = [];
-  for (const subdir of ["references", "scripts", "assets"]) {
+  for (const subdir of SKILL_SUBDIRS) {
     for await (const file of walk(join(skillRoot, subdir))) {
       if (isTextExt(file)) {
         textFiles.push(file);

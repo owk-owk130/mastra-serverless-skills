@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, readFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,8 +12,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(tempDir, { recursive: true, force: true });
 });
+
+const spyWarn = () => vi.spyOn(console, "warn").mockImplementation(() => {});
 
 const writeFixture = async (relPath: string, content: string | Uint8Array): Promise<void> => {
   const full = join(tempDir, relPath);
@@ -109,6 +112,59 @@ describe("bundle CLI logic", () => {
       "skills/foo/scripts/tool.ts",
     ]);
     expect(bundleObj["skills/foo/scripts/run.py"]).toBe("print('hi')");
+  });
+
+  it("skips hidden files without warning", async () => {
+    await writeFixture("skills/foo/SKILL.md", "# foo");
+    await writeFixture("skills/foo/assets/.DS_Store", new Uint8Array([0x00, 0x01]));
+    await writeFixture("skills/foo/references/.hidden.md", "# hidden");
+
+    const warn = spyWarn();
+    const out = join(tempDir, "out.ts");
+    await bundle(join(tempDir, "skills"), out);
+    const bundleObj = await importGeneratedBundle(out);
+
+    expect(Object.keys(bundleObj)).toEqual(["skills/foo/SKILL.md"]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns about stray files at the skill root and excludes them", async () => {
+    await writeFixture("skills/foo/SKILL.md", "# foo");
+    await writeFixture("skills/foo/extra.md", "# extra");
+
+    const warn = spyWarn();
+    const out = join(tempDir, "out.ts");
+    await bundle(join(tempDir, "skills"), out);
+    const bundleObj = await importGeneratedBundle(out);
+
+    expect(Object.keys(bundleObj)).toEqual(["skills/foo/SKILL.md"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("extra.md"));
+  });
+
+  it("warns about stray directories at the skill root and excludes them", async () => {
+    await writeFixture("skills/foo/SKILL.md", "# foo");
+    await writeFixture("skills/foo/docs/guide.md", "# guide");
+
+    const warn = spyWarn();
+    const out = join(tempDir, "out.ts");
+    await bundle(join(tempDir, "skills"), out);
+    const bundleObj = await importGeneratedBundle(out);
+
+    expect(Object.keys(bundleObj)).toEqual(["skills/foo/SKILL.md"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("docs"));
+  });
+
+  it("does not warn about hidden files at the skill root", async () => {
+    await writeFixture("skills/foo/SKILL.md", "# foo");
+    await writeFixture("skills/foo/.gitignore", "node_modules");
+
+    const warn = spyWarn();
+    const out = join(tempDir, "out.ts");
+    await bundle(join(tempDir, "skills"), out);
+    const bundleObj = await importGeneratedBundle(out);
+
+    expect(Object.keys(bundleObj)).toEqual(["skills/foo/SKILL.md"]);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("walks recursively to find nested skill folders", async () => {
